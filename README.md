@@ -364,8 +364,6 @@ Add a simple authentication layer to the API Gateway. Use a token-based approach
 - Return `401 Unauthorized` if the token is missing or invalid.
 - The `/health` endpoint should remain publicly accessible without authentication.
 
-You may use a hardcoded list of valid tokens or implement JWT validation.
-
 ---
 
 ## Part 11: Add Rate Limiting to the Gateway
@@ -391,26 +389,143 @@ Create a [Bruno](https://www.usebruno.com/) test collection that covers the full
 
 ## Part 13: Publish Docker Images to a Registry
 
-Push your service images to a Docker registry (e.g., Docker Hub or GitHub Container Registry):
+Push your service images to a Docker registry (e.g., Docker Hub or GitHub Container Registry) so that the application can be run **without** cloning the source code.
 
-1. Tag each image with a meaningful version (e.g., `v1.0`).
-2. Push the images to the registry.
-3. Update `docker-compose.yml` to include an `image` field alongside `build` so that the images can be pulled without building locally.
+### 13.1 Build, Tag, and Push
+
+After building your images with `docker compose build`, tag and push each one:
 
 ```bash
-docker tag user-service:latest <your-registry>/user-service:v1.0
-docker push <your-registry>/user-service:v1.0
+# Log in to Docker Hub
+docker login
+
+# Tag each image with your Docker Hub username
+docker tag swe4213-lab2-gateway:latest <your-dockerhub-username>/gateway:v1.0
+docker tag swe4213-lab2-user-service:latest <your-dockerhub-username>/user-service:v1.0
+docker tag swe4213-lab2-product-service:latest <your-dockerhub-username>/product-service:v1.0
+docker tag swe4213-lab2-order-service:latest <your-dockerhub-username>/order-service:v1.0
+
+# Push them
+docker push <your-dockerhub-username>/gateway:v1.0
+docker push <your-dockerhub-username>/user-service:v1.0
+docker push <your-dockerhub-username>/product-service:v1.0
+docker push <your-dockerhub-username>/order-service:v1.0
 ```
 
----
+### 13.2 How Your Lab Will Be Graded
 
-## Part 14: Single Command Setup
+The TA will run your project using **only** the images you pushed — no source code, no `build` step. The TA will use the following `docker-compose.yml`, replacing the image names with yours:
 
-The entire lab environment should be runnable with a single command. Ensure that:
+```yaml
+version: '3.8'
 
-- `docker compose up --build` starts everything from scratch with no manual steps.
-- All databases are initialized automatically via init scripts.
-- All services wait for their dependencies before accepting traffic (using the health checks from Part 8).
-- Document the single command in a clear place so anyone cloning the repo can get started immediately.
+services:
+  gateway:
+    image: <your-dockerhub-username>/gateway:v1.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - app-network
+
+  user-service:
+    image: <your-dockerhub-username>/user-service:v1.0
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: user-db
+      DB_PORT: 5432
+      DB_NAME: userdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      - user-db
+    networks:
+      - app-network
+
+  user-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - user-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  product-service:
+    image: <your-dockerhub-username>/product-service:v1.0
+    ports:
+      - "3002:3002"
+    environment:
+      DB_HOST: product-db
+      DB_PORT: 5432
+      DB_NAME: productdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      - product-db
+    networks:
+      - app-network
+
+  product-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: productdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - product-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  order-service:
+    image: <your-dockerhub-username>/order-service:v1.0
+    ports:
+      - "3003:3003"
+    environment:
+      DB_HOST: order-db
+      DB_PORT: 5432
+      DB_NAME: orderdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      - order-db
+      - user-service
+      - product-service
+    networks:
+      - app-network
+
+  order-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - order-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  user-data:
+  product-data:
+  order-data:
+```
+
+Notice there are **no `build` fields and no init.sql mounts** — the TA only has your images. This means:
+
+- Your database tables **must** be created by the application code (e.g., in the `waitForDB` / startup logic), not only by `init.sql`.
+- Everything must work with just `docker compose up`.
+
+Make sure to test this yourself before submitting: save the compose file above, replace the image names with yours, and run `docker compose up` in an empty directory.
 
 ---
