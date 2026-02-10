@@ -383,6 +383,7 @@ Create a [Bruno](https://www.usebruno.com/) test collection that covers the full
 - Test all CRUD endpoints for Users, Products, and Orders through the gateway.
 - Include tests for error cases (missing fields, invalid IDs, non-existent resources).
 - Include tests for the validation logic in the Order Service (invalid user, invalid product).
+- Include a test that verifies rate limiting works as expected (e.g., sending requests beyond the limit returns `429 Too Many Requests`).
 - The test collection should be committed to the repository so others can run it.
 
 ---
@@ -417,8 +418,6 @@ docker push <your-dockerhub-username>/order-service:v1.0
 The TA will run your project using **only** the images you pushed — no source code, no `build` step. The TA will use the following `docker-compose.yml`, replacing the image names with yours:
 
 ```yaml
-version: '3.8'
-
 services:
   gateway:
     image: <your-dockerhub-username>/gateway:v1.0
