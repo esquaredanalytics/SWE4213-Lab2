@@ -1,0 +1,28 @@
+meta {
+  name: OrderErrorScenario2
+  type: http
+  seq: 12
+}
+
+post {
+  url: http://localhost:3000/api/orders
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer token2
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_id": 1,
+    "product_id": 9999,
+    "quantity": 1
+  }
+}
+
+settings {
+  encodeUrl: false
+}

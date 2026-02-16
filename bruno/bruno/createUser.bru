@@ -1,0 +1,28 @@
+meta {
+  name: createUser
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:3000/api/users
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer token2
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Aditya",
+    "email": "AdityaB@unb.com"
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

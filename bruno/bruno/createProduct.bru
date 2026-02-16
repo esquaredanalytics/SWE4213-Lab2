@@ -1,0 +1,28 @@
+meta {
+  name: createProduct
+  type: http
+  seq: 6
+}
+
+post {
+  url: http://localhost:3000/api/products
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer token2
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Keyboard",
+    "description": "Mechanical keyboard",
+    "price": 49.99
+  }
+}
+
+settings {
+  encodeUrl: false
+}

@@ -6,10 +6,16 @@ app.use(express.json());
 
 const PORT = 3003;
 
+
+
 // TODO: Create a PostgreSQL connection pool
 // HINT: Same pattern as user-service and product-service
 const pool = new Pool({
-  // YOUR CODE HERE
+  host: process.env.DB_HOST || 'order-db',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || 'orderdb',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
 });
 
 // Wait for database to be ready (provided for you)
@@ -31,22 +37,65 @@ const waitForDB = async (retries = 10, delay = 2000) => {
 // HINT: Use fetch() to call http://user-service:3001/users/:id
 // Return the user object if found, or null if not
 const validateUser = async (userId) => {
-  // TODO: Implement inter-service communication
-  // YOUR CODE HERE
+  try {
+    const response = await fetch(
+      `http://user-service:3001/users/${userId}`
+    );
+
+    if (response.status === 404) {
+      return { found: false };
+    }
+
+    if (!response.ok) {
+      return { error: true };
+    }
+
+    const data = await response.json();
+    return { found: true, data };
+
+  } catch (err) {
+    console.error('User service unreachable:', err.message);
+    return { unreachable: true };
+  }
 };
 
 // Helper: Validate that a product exists by calling the Product Service
 // HINT: Use fetch() to call http://product-service:3002/products/:id
 // Return the product object if found, or null if not
 const validateProduct = async (productId) => {
-  // TODO: Implement inter-service communication
-  // YOUR CODE HERE
+  try {
+    const response = await fetch(
+      `http://product-service:3002/products/${productId}`
+    );
+
+    if (response.status === 404) {
+      return { found: false };
+    }
+
+    if (!response.ok) {
+      return { error: true };
+    }
+
+    const data = await response.json();
+    return { found: true, data };
+
+  } catch (err) {
+    console.error('Product service unreachable:', err.message);
+    return { unreachable: true };
+  }
 };
+
 
 // TODO: Implement GET /orders - List all orders
 // Query: SELECT * FROM orders ORDER BY id
 app.get('/orders', async (req, res) => {
-  // YOUR CODE HERE
+   try {
+    const result = await pool.query('SELECT * FROM orders ORDER BY id');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching orders:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // TODO: Implement POST /orders - Create a new order
@@ -59,18 +108,105 @@ app.get('/orders', async (req, res) => {
 //   6. Insert into orders table
 // Query: INSERT INTO orders (user_id, product_id, quantity, total_price) VALUES ($1, $2, $3, $4) RETURNING *
 app.post('/orders', async (req, res) => {
-  // YOUR CODE HERE
+  const { user_id, product_id, quantity } = req.body;
+  if (!user_id || !product_id || !quantity) {
+    return res.status(400).json({ error: 'user_id, product_id, quantity are required' });
+  }
+
+  try {
+    
+    const userCheck = await validateUser(user_id);
+    if (userCheck.unreachable) {
+      return res.status(503).json({
+        error: 'User Service is unavailable'
+      });
+    }
+    if (!userCheck.found) {
+      return res.status(404).json({
+      error: 'user not found'
+      });
+    }
+
+    const user = userCheck.data;
+
+    const productCheck = await validateProduct(product_id);
+
+    if (productCheck.unreachable) {
+      return res.status(503).json({
+      error: 'Product Service is unavailable'
+      });
+    }
+
+    if (!productCheck.found) {
+      return res.status(404).json({
+      error: 'product not found'
+      });
+    }
+
+    const product = productCheck.data;
+    const totalPrice = product.price * quantity;
+    const result = await pool.query(
+      'INSERT INTO orders (user_id, product_id, quantity, total_price) VALUES ($1, $2, $3, $4) RETURNING *',
+      [user_id, product_id, quantity, totalPrice]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating order:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // TODO: Implement GET /orders/:id - Get order by ID
 // Query: SELECT * FROM orders WHERE id = $1
 app.get('/orders/:id', async (req, res) => {
-  // YOUR CODE HERE
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'order not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching order:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Start server after DB is ready
-waitForDB().then(() => {
+waitForDB().then(async() => {
+  await initDB();
   app.listen(PORT, () => {
     console.log(`Order Service running on port ${PORT}`);
   });
+});
+
+const initDB = async () => {
+  await pool.query(`
+  CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    total_price DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+  `);
+  const { rowCount } = await pool.query('SELECT 1 FROM orders LIMIT 1');
+};
+
+
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+
+    res.status(200).json({
+      status: "ok",
+    });
+  } catch (err) {
+    console.error("Health check failed:", err);
+    res.status(500).json({
+      status: "error",
+      service: "order-service",
+      db: "disconnected",
+    });
+  }
 });

@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
+RUN apk add --no-cache curl
+
 EXPOSE 3002
 
 CMD ["npm", "start"]
